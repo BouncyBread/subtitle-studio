@@ -2,6 +2,70 @@
 
 A private subtitle generator and buffered video player for **Apple Silicon Macs**, built with MLX Whisper and FFmpeg. It runs in your browser, but the server and speech model run on your Mac. No account, subscription, API key, or cloud transcription service.
 
+## First-time setup on an Apple Silicon Mac
+
+**The repository includes both subtitle generation and Watch with live subtitles.** Setup is partly automatic: install the system tools once, then the launcher prepares the Python environment. This version is designed for Apple Silicon Macs (M1 or newer), not Intel Macs, Windows, or Linux.
+
+### 1. Install the system tools
+
+If you do not have Homebrew, install it using the instructions at [brew.sh](https://brew.sh/) and complete its printed shell setup steps. Then open Terminal and run:
+
+```sh
+brew install uv ffmpeg mpv
+```
+
+- **uv** prepares Python and installs the app's Python packages.
+- **FFmpeg** reads video/audio files and inspects their audio tracks.
+- **mpv** is the native player used by **Watch with live subtitles**. It is only optional if you will generate subtitle files without using watch mode.
+
+The launcher does **not** install Homebrew, FFmpeg, or mpv for you.
+
+### 2. Download this repository
+
+While signed in to a GitHub account with access to this private repository, choose **Code → Download ZIP**, then extract it. Alternatively, clone it using your normal authenticated Git setup:
+
+```sh
+git clone https://github.com/BouncyBread/subtitle-studio.git
+cd subtitle-studio
+```
+
+### 3. Launch Subtitle Studio
+
+Double-click **Start Subtitle Studio.command** in the extracted or cloned folder. Keep its Terminal window open while processing or watching. The app opens at **http://127.0.0.1:8765**.
+
+If the downloaded launcher is not executable, open Terminal in that folder and run:
+
+```sh
+chmod +x "Start Subtitle Studio.command"
+./"Start Subtitle Studio.command"
+```
+
+On first launch, the script uses uv to obtain Python 3.12 if needed, create a local `.venv`, and install the app's Python dependencies. On first use of each Whisper model, the app downloads that model automatically into `data/models/`. Large v3 is about a 3 GB download. Allow the initial setup/download to finish; subsequent runs reuse the environment and model cache.
+
+| Setup task | Automatic? |
+|---|---|
+| Install Homebrew, uv, FFmpeg, and mpv | No — complete step 1 |
+| Prepare Python 3.12 and the local Python environment | Yes — first launcher run |
+| Install the app's Python packages | Yes — first launcher run |
+| Download the chosen Whisper model | Yes — first use of that model |
+| Open the local browser interface | Yes — launcher |
+
+Internet access is needed for initial setup and model downloads. After the selected model is cached, processing can run offline. No transcription account or API key is needed. Dependencies are locked in `uv.lock`; no system Python packages are changed. Videos, generated subtitles, job history, and downloaded models are not included in the GitHub repository.
+
+### 4. Generate subtitles or watch while they are generated
+
+Choose a video, select its **Audio track to use**, and set the model and translation options. **Translate to English** is enabled by default.
+
+- Click **Generate subtitles** to create, review, and export SRT/VTT/text files.
+- Click **Watch with live subtitles** to open mpv. It waits for the configured subtitle buffer (60 seconds of processed audio by default), then starts playing while generation continues. It pauses to rebuild the buffer if playback catches up. See [watch-mode controls and behavior](#watch-while-subtitles-are-generated).
+
+For manual setup instead of the launcher, run these commands from the project folder after installing the system tools:
+
+```sh
+UV_CACHE_DIR="$PWD/.cache/uv" uv sync --python 3.12
+.venv/bin/python launch.py
+```
+
 ## Open the app
 
 Double-click **Start Subtitle Studio.command** in this folder. Keep its Terminal window open while processing. The app opens at **http://127.0.0.1:8765**. Press Control-C in that Terminal to stop it.
@@ -42,23 +106,6 @@ Transcription uses word timestamps where available. Translation uses Whisper seg
 - The app listens only on `127.0.0.1`. It has no analytics or remote fonts. Model downloads contact Hugging Face; your audio is not sent there. Cached models are tried without network access first.
 - Downloads go to your browser's download folder. Settings are remembered in that browser.
 - Job history remains until you remove the corresponding folders with the app stopped. Keep `data/models/` to avoid downloading again.
-
-## Setup on another Mac
-
-Requires macOS on Apple Silicon, Python 3.12, [uv](https://docs.astral.sh/uv/), and [FFmpeg](https://ffmpeg.org/). With Homebrew:
-
-```sh
-brew install uv ffmpeg mpv
-```
-
-Then open the launcher. It creates a project-local Python environment. For manual setup:
-
-```sh
-UV_CACHE_DIR="$PWD/.cache/uv" uv sync --python 3.12
-.venv/bin/python launch.py
-```
-
-Dependencies are locked in `uv.lock`. No system Python packages are changed. The first setup and first model use require internet access.
 
 ## Development and checks
 
