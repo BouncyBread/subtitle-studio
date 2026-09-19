@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Subtitle Studio</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/" aria-label="Subtitle Studio home"><span class="mark" aria-hidden="true">cc</span> Subtitle Studio</a><span class="local"><span aria-hidden="true">●</span> Runs on your Mac</span></header>
+<main>
+<div class="intro"><div><h1>Give every word a place.</h1><p>Turn your video into subtitles. Privately, on your Mac.</p></div><span class="engine">Whisper + Apple Silicon</span></div>
+<div id="alert" role="alert" hidden></div>
+<div class="workspace">
+<section class="setup" aria-labelledby="new-title">
+<h2 id="new-title">Create subtitles</h2>
+<div class="dropzone" id="dropzone">
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="5" y="7" width="30" height="26" rx="5" stroke="currentColor" stroke-width="1.5"/><path d="m17 15 9 5-9 5V15Z" fill="currentColor"/></svg>
+<strong id="file-name">Drop a video or audio file</strong><span id="file-meta">MP4, MKV, MOV, MP3, WAV, and more</span>
+<button id="choose" class="secondary" type="button">Choose file…</button>
+<input type="file" id="file" hidden>
+<button id="browse" class="text-button" type="button">Or browse using your browser</button>
+</div>
+<form id="settings-form">
+<div class="field"><label for="track">Audio track to use</label><select id="track" disabled><option value="0">Choose a file to see its audio tracks</option></select><p id="track-help" class="help">Used for subtitle generation and audio in the live player.</p></div>
+<div class="field"><label for="model">Transcription model</label><select id="model"><option value="large">Best accuracy · Whisper Large v3</option><option value="turbo">Balanced · Whisper Large v3 Turbo</option><option value="small">Lightweight · Whisper Small</option><option value="tiny">Quick test · Whisper Tiny</option></select><p id="model-help" class="help">Highest accuracy option here. About 3 GB to download.</p></div>
+<div class="field"><label for="language">Spoken language</label><select id="language"><option value="">Detect automatically</option><option value="en">English</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="zh">Chinese</option><option value="yue">Cantonese</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="it">Italian</option><option value="pt">Portuguese</option><option value="ru">Russian</option><option value="uk">Ukrainian</option><option value="ar">Arabic</option><option value="hi">Hindi</option><option value="th">Thai</option><option value="vi">Vietnamese</option><option value="id">Indonesian</option><option value="nl">Dutch</option><option value="pl">Polish</option><option value="tr">Turkish</option><option value="sv">Swedish</option><option value="fi">Finnish</option><option value="da">Danish</option><option value="no">Norwegian</option><option value="el">Greek</option><option value="he">Hebrew</option><option value="cs">Czech</option><option value="ro">Romanian</option><option value="hu">Hungarian</option><option value="ms">Malay</option><option value="tl">Tagalog</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="bn">Bengali</option></select></div>
+<label class="toggle-row" for="translate"><span><strong>Translate to English</strong><small>Create English subtitles from foreign speech.</small></span><input id="translate" type="checkbox" role="switch" checked></label>
+<p class="help" id="translation-help">Uses Whisper directly. No account or separate translator needed.</p>
+<div class="field"><label for="buffer">Live player subtitle buffer</label><select id="buffer"><option value="30">30 seconds · start sooner</option><option value="60" selected>60 seconds · recommended</option><option value="120">2 minutes · fewer interruptions</option></select><p class="help">For watch mode. Playback waits if it catches up to generation.</p></div>
+<details><summary>Advanced settings</summary><div class="advanced">
+<div class="split"><div class="field"><label for="width">Characters per line</label><input type="number" id="width" min="24" max="64" value="42"><p class="help">42 works well for most subtitles.</p></div></div>
+<div class="field"><label for="prompt">Names & vocabulary <span class="optional">Optional</span></label><textarea id="prompt" rows="2" maxlength="1500" placeholder="Character names, places, or unusual terms"></textarea><p class="help">Hints for recognition, not instructions to the model.</p></div>
+</div></details>
+<button id="generate" class="primary" type="submit" disabled>Generate subtitles <span aria-hidden="true">↗</span></button>
+<button id="watch" class="secondary watch-button" type="button" disabled>▶ Watch with live subtitles</button><p class="help">Opens the local player. Subtitles arrive as you watch; English translation uses your settings above.</p>
+<p class="privacy">Your media stays here. First use downloads the model; after that, you can work offline.</p>
+</form>
+</section>
+<section class="output" aria-labelledby="output-title">
+<div class="section-heading"><h2 id="output-title">Your subtitles</h2><span id="job-count" class="muted">Ready when you are</span></div>
+<div id="empty" class="empty"><div class="subtitle-art" aria-hidden="true"><span></span><span></span><div>The next story starts here.</div></div><h3>A little less rewinding.</h3><p>Choose a file, pick your settings, and generate.<br>You can review every line before exporting.</p></div>
+<div id="job-view" hidden>
+<div class="job-heading"><h3 id="job-name"></h3><span id="job-badge" class="badge"></span></div>
+<div id="player-panel" hidden><div class="player-heading"><strong>Live subtitle player</strong><button id="reopen-player" class="secondary" type="button">Open player ↗</button></div><p id="player-status" role="status"></p><p class="help">Space: pause · F: fullscreen · Arrow keys: seek · B: buffer status · Q: close. Seeking beyond ready subtitles waits for generation to catch up. Closing the player keeps generation running.</p></div>
+<div id="progress-panel" role="status" aria-live="polite"><div class="steps"><span data-stage="audio">Read audio</span><span data-stage="model">Load model</span><span data-stage="transcribing">Create subtitles</span></div><div class="progress-numbers"><strong id="progress-percent">Preparing…</strong><span id="remaining">Estimating time remaining…</span></div><progress max="100" id="progress" aria-label="Processing your file"></progress><p id="progress-message"></p><p id="elapsed" class="help"></p><button id="cancel" class="secondary" type="button">Cancel processing</button></div>
+<details id="activity"><summary>Live processing log</summary><p class="help" id="log-status">Updates every few seconds while processing.</p><label class="follow-log"><input type="checkbox" id="follow-log" checked> Follow latest updates</label><pre id="live-log" tabindex="0" aria-label="Recent processing log">Waiting for the worker to start…</pre><p class="help">Latest 80 log lines. Progress updates after each audio chunk; difficult chunks can take longer. This is a processing log, not a live transcript.</p></details>
+<div id="results" hidden>
+<div class="result-meta"><span id="result-description"></span><span id="save-state" role="status"></span></div>
+<div class="export-bar"><a id="srt" class="primary download" href="#">Download SRT ↓</a><a id="vtt" class="secondary download" href="#">VTT</a><a id="txt" class="secondary download" href="#">Text</a><button id="save" class="text-button" type="button" disabled>Save edits</button></div>
+<p class="help">SRT works with VLC and most video players. Keep it beside your video with the same filename.</p>
+<div class="editor-heading"><span>Time (seconds)</span><span>Subtitle text · click to edit</span></div><div id="cues"></div>
+<div id="pagination"><button id="previous" class="secondary" type="button">← Previous</button><span id="page-label"></span><button id="next" class="secondary" type="button">Next →</button></div>
+</div>
+</div>
+<section class="cleanup-panel" aria-label="Storage cleanup"><button id="cleanup" class="secondary" type="button">Clean up media copies</button><p id="cleanup-size" class="help"></p><p class="help">Removes unused copied videos and temporary audio. Keeps original videos, subtitles, history, and models. Active jobs and open players are skipped. To watch a cleaned-up upload again, select its original file.</p><p id="cleanup-result" role="status" class="help"></p></section>
+<div class="history"><h3>Recent files</h3><p id="no-history" class="help">Your completed files will appear here.</p><div id="history-list"></div></div>
+</section>
+</div>
+<footer><span>Local files. Local intelligence.</span><span>Subtitles are AI-generated. Review names, timing, and translations.</span></footer>
+</main>
+</body></html>
