@@ -5,3 +5,5 @@
 .watch-button{width:100%;margin-top:10px;min-height:44px;border-color:var(--accent)}#player-panel{padding:16px;background:#edf5ef;border-radius:8px;margin-bottom:22px}.player-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.player-heading strong{font-size:13px}#player-status{font-size:13px}
 
 .cleanup-panel{border-top:1px solid var(--line);margin-top:24px;padding-top:20px}.cleanup-panel>button{min-height:40px}#cleanup-result{font-weight:600;color:var(--accent)}
+
+#load-remote{margin-top:8px}#download-status{margin-bottom:16px}

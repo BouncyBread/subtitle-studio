@@ -37,7 +37,8 @@ def collect(jobs_root, is_busy, remove=False):
             if path.is_symlink() or path.resolve() in protected or not path.is_file():
                 continue
             try:
-                size = path.stat().st_size
+                stat = path.stat()
+                size = stat.st_blocks * 512 if job.get('remote') else stat.st_size
                 if remove:
                     path.unlink()
                 summary['bytes'] += size

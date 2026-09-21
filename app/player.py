@@ -37,7 +37,8 @@ def launch(folder):
                 '--term-status-msg=', '--sub-auto=no', '--sid=no', '--aid=' + str(job['settings']['track'] + 1),
                 '--script=' + str(ROOT / 'app/player.lua'),
                 '--input-ipc-server=' + str(ipc_dir / 'control.sock'),
-                '--', job['source']]
+                '--demuxer-max-bytes=16MiB', '--cache-secs=20',
+                '--', job.get('remote_source', job['source'])]
         try:
             with (folder / 'player.log').open('w') as output:
                 proc = subprocess.Popen(args, env=env, stdout=output, stderr=output, start_new_session=True)

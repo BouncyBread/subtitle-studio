@@ -165,3 +165,28 @@ The **Clean up media copies** button above Recent files shows reclaimable space 
 
 
 Audio-track inspection happens when selecting a file. **Choose file…** probes the original directly. Browser selection and drag-and-drop first copy the video once into `data/uploads/` to inspect all tracks; starting generation moves that same copy into the job folder without uploading it again. Unused prepared copies can be removed with **Clean up media copies**; copies still uploading are skipped. If inspection fails, its temporary copy is removed. Files without audio cannot be submitted. To process a browser-selected file again with different settings, choose it again.
+
+
+## Watch a TorBox video link
+
+1. In TorBox, copy the **direct download link for one ready video file**. A torrent, magnet, dashboard, or share-page link will not work.
+2. Paste it into **Or use a TorBox video link**, then click **Load TorBox link**.
+3. Choose the audio track, model, English translation setting, and subtitle buffer.
+4. Click **Watch with live subtitles**. The native player starts once enough subtitles are ready, and waits again if generation falls behind. **Generate subtitles** also works with links.
+
+The app supports HTTPS links on `torbox.app` and its subdomains, including redirects within those domains. The file must support HTTP byte ranges and have a readable duration. No TorBox API key is needed when using a direct link. TorBox account access and a ready file are still required on TorBox's side.
+
+The player and audio decoder share one local byte-range cache with serialized upstream requests. Only requested ranges are fetched; playback and transcription can start before the full file downloads. Audio is processed in 30-second windows with two seconds of surrounding context. Very fast downloads or small files may finish downloading before the first subtitles appear. Speech crossing a window boundary can have less accurate caption timing; review the exported subtitles.
+
+**Privacy and storage:** the pasted URL stays in server memory, is cleared from the input, and is never saved in job metadata, application logs, browser storage, or Git. Child processes receive only a localhost proxy address. Cached video ranges are stored under `data/` and may eventually occupy the size of the video. **Clean up media copies** removes unused caches while preserving subtitles, originals, models, and active jobs/players. Close the player before cleaning its cache.
+
+Keep Subtitle Studio running while watching. Restarting the app ends TorBox sessions; paste the link again to watch, even if some ranges are cached. Expired/denied links and interrupted downloads produce an error; paste a fresh link and start a new job. This version does not refresh expired links or resume a failed job automatically. Seeking into uncached video fetches the needed ranges, while subtitle generation continues sequentially.
+
+### Streaming checks
+
+```sh
+.venv/bin/python -m pytest -q
+PYTHONPATH=. .venv/bin/python tests/remote_integration.py
+```
+
+The opt-in integration check generates a synthetic two-audio-track video, runs real FFmpeg against the localhost cache, and verifies progressive subtitle publication before the full video has been fetched. It uses a deterministic transcription stub and mock upstream HTTP responses; a real TorBox link is needed to verify a particular account/CDN combination.

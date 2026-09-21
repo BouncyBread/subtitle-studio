@@ -35,14 +35,15 @@ async function chooseFile(value) {
   const version=++selectionVersion;
   chosen=null;$('generate').disabled=true;$('watch').disabled=true;
   $('file-name').textContent=value.name;
-  $('file-meta').textContent=value.path?'Opened directly from your Mac · no copy needed':`${(value.file.size/1024/1024).toFixed(1)} MB · copied once for inspection and processing`;
+  $('file-meta').textContent=value.url?'TorBox · shared local download cache':value.path?'Opened directly from your Mac · no copy needed':`${(value.file.size/1024/1024).toFixed(1)} MB · copied once for inspection and processing`;
   $('choose').textContent='Change file…';$('alert').hidden=true;
   $('track').disabled=true;$('track').replaceChildren(new Option('Reading audio tracks…','0'));
   $('track-help').textContent='Inspecting the selected file…';
   try {
-    const result=value.path?await api('/api/media/probe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:value.path})}):await uploadForTracks(value.file,version);
+    const result=value.url?await api('/api/media/remote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:value.url})}):value.path?await api('/api/media/probe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:value.path})}):await uploadForTracks(value.file,version);
     if(version!==selectionVersion)return;
     if(result.upload_id)value.upload_id=result.upload_id;
+    if(result.remote_id){value.remote_id=result.remote_id;delete value.url;}
     $('track').replaceChildren();
     for(const t of result.tracks){
       const label=[`${t.index+1}. ${t.language_name}`,t.title,t.codec.toUpperCase(),t.channels?`${t.channels} ch`:'',t.default?'Default':''].filter(Boolean).join(' · ');
@@ -53,8 +54,9 @@ async function chooseFile(value) {
     $('track-help').textContent=`${result.tracks.length} audio track${result.tracks.length===1?'':'s'} found. This selection controls both subtitles and live-player audio.`;
     chosen=value;$('generate').disabled=submitting;$('watch').disabled=submitting;
     refreshCleanup(true).catch(showError);
-  }catch(e){if(version===selectionVersion){showError(e);$('track').replaceChildren(new Option('Could not read audio tracks','0'));$('track-help').textContent='Choose the file again to retry.';}}
+  }catch(e){if(version===selectionVersion){showError(e);$('track').replaceChildren(new Option('Could not read audio tracks','0'));$('track-help').textContent=value.url?'Paste a fresh direct video link to retry.':'Choose the file again to retry.';}}
 }
+$('load-remote').onclick=async()=>{const url=$('remote-url').value.trim();if(!url)return;$('remote-url').value='';$('load-remote').disabled=true;try{await chooseFile({url,name:'TorBox video'});}finally{$('load-remote').disabled=false;}};
 $('choose').onclick=async()=>{ $('choose').disabled=true; try {const value=await api('/api/pick',{method:'POST'}); if(value.path) chooseFile({path:value.path,name:value.path.split('/').pop()});}catch(e){showError(e);}finally{$('choose').disabled=false;} };
 $('browse').onclick=()=>$('file').click();
 $('file').onchange=()=>{if($('file').files[0])chooseFile({file:$('file').files[0],name:$('file').files[0].name});};
@@ -69,8 +71,8 @@ async function startJob(streaming) {
   $('generate').textContent='Adding file…';$('alert').hidden=true;
   try {
     const s={...settings(),streaming};const submittedFile=chosen;remember();
-    const job=submittedFile.path?await api('/api/jobs/path',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:submittedFile.path,settings:s})}):await api('/api/jobs/prepared',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({upload_id:submittedFile.upload_id,settings:s})});
-    if(chosen===submittedFile&&submittedFile.upload_id){chosen=null;$('track').disabled=true;$('track-help').textContent='File added. Choose it again to create another job.';}
+    const job=submittedFile.remote_id?await api('/api/jobs/remote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({remote_id:submittedFile.remote_id,settings:s})}):submittedFile.path?await api('/api/jobs/path',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:submittedFile.path,settings:s})}):await api('/api/jobs/prepared',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({upload_id:submittedFile.upload_id,settings:s})});
+    if(chosen===submittedFile&&(submittedFile.upload_id||submittedFile.remote_id)){chosen=null;$('track').disabled=true;$('track-help').textContent='File added. Choose it again to create another job.';}
     await select(job.id);await refreshHistory();
     if(streaming) await api(`/api/jobs/${job.id}/player`,{method:'POST'});
   }catch(e){showError(e);}
@@ -139,7 +141,7 @@ $('cleanup').onclick=async()=>{
   cleanupBusy=true;$('cleanup').disabled=true;$('cleanup-result').textContent='Cleaning up…';
   try {
     const data=await api('/api/cleanup',{method:'POST'});
-    if(chosen?.upload_id){chosen=null;selectionVersion++;$('generate').disabled=true;$('watch').disabled=true;$('track').disabled=true;$('track-help').textContent='Prepared copy cleaned up. Choose the original file again.';}
+    if(chosen?.upload_id||chosen?.remote_id){chosen=null;selectionVersion++;$('generate').disabled=true;$('watch').disabled=true;$('track').disabled=true;$('track-help').textContent='Prepared copy cleaned up. Choose the original file again.';}
     $('cleanup-result').textContent=data.files?`Freed ${bytesLabel(data.bytes)}. Subtitles and history kept.`:'Nothing unused to remove.';
     if(data.skipped_jobs)$('cleanup-result').textContent+=' Active jobs and players were skipped.';
     if(data.errors)$('cleanup-result').textContent+=` ${data.errors} file(s) could not be removed.`;
@@ -148,6 +150,8 @@ $('cleanup').onclick=async()=>{
   finally{cleanupBusy=false;$('cleanup').disabled=false;refreshCleanup(true).catch(showError);}
 };
 function renderPlayer(job) {
+  $('download-status').hidden=!job.remote;
+  if(job.remote){const d=job.download;$('download-status').textContent=d?(d.error||`TorBox cache: ${bytesLabel(d.bytes)} of ${bytesLabel(d.total)} fetched · shared by audio processing and playback`):'TorBox session ended. Paste the link again to watch; saved subtitles remain available.';}
   $('player-panel').hidden=!job.settings.streaming;
   if(!job.settings.streaming)return;
   const p=job.player||{}, stream=job.stream||{};

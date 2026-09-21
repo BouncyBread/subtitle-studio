@@ -21,6 +21,7 @@ from app.subtitles import render, validate_segments
 from app.worker import atomic_json
 from app.progress import snapshot, log_snapshot
 from app import player
+from app.remote import hub, RangeCache
 from app.cleanup import collect
 from app.media import audio_tracks
 
@@ -56,6 +57,13 @@ class PreparedJob(BaseModel):
     upload_id: str
     settings: Settings = Field(default_factory=Settings)
 
+class RemoteLink(BaseModel):
+    url: str = Field(min_length=1, max_length=16000)
+
+class RemoteJob(BaseModel):
+    remote_id: str
+    settings: Settings = Field(default_factory=Settings)
+
 class Segment(BaseModel):
     start: float = Field(ge=0, allow_inf_nan=False)
     end: float = Field(gt=0, allow_inf_nan=False)
@@ -82,6 +90,7 @@ def view(folder):
     progress = folder / 'progress.json'
     job.update(json.loads(progress.read_text()) if progress.exists() else {'stage': 'queued', 'message': 'Waiting to start…'})
     job.pop('source', None)
+    job.pop('remote_source', None)
     return job
 
 
@@ -123,6 +132,7 @@ async def lifespan(app):
             if proc.poll() is None:
                 os.killpg(proc.pid, signal.SIGTERM)
     thread.join(timeout=5)
+    hub.shutdown()
 
 app = FastAPI(title='Subtitle Studio', lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
@@ -155,6 +165,13 @@ def cleanup_media(remove=False):
         def busy(folder):
             proc = active.get(folder.name)
             return (proc is not None and proc.poll() is None) or player.status(folder)['running']
+        if remove:
+            for key, cache in list(hub.caches.items()):
+                if cache.started and (cache.folder / 'job.json').exists():
+                    if view(cache.folder)['stage'] in ('done', 'error', 'cancelled') and not busy(cache.folder):
+                        hub.discard(key)
+                elif (cache.folder / 'upload.json').exists():
+                    hub.discard(key)
         result = collect(JOBS, busy, remove=remove)
         for folder in UPLOADS.iterdir():
             if folder.is_symlink() or not (folder / 'upload.json').is_file():
@@ -162,7 +179,9 @@ def cleanup_media(remove=False):
             path = folder / 'source.media'
             if not path.is_symlink() and path.is_file():
                 try:
-                    size = path.stat().st_size
+                    stat = path.stat()
+                    metadata = json.loads((folder / 'upload.json').read_text())
+                    size = stat.st_blocks * 512 if metadata.get('remote') else stat.st_size
                     if remove:
                         path.unlink()
                         (folder / 'upload.json').unlink()
@@ -218,6 +237,57 @@ def create_job(path, settings, uploaded=False, folder=None, name=None):
     atomic_json(folder / 'job.json', job)
     work.put(folder)
     return view(folder)
+
+@app.post('/api/media/remote')
+def prepare_remote(body: RemoteLink):
+    if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+        raise HTTPException(503, 'FFmpeg is missing. Install it with: brew install ffmpeg')
+    folder = UPLOADS / str(uuid.uuid4())
+    folder.mkdir()
+    folder.chmod(0o700)
+    cache = RangeCache(body.url.strip(), folder)
+    try:
+        cache.block(0)
+        source = hub.add(cache)
+        cache.tracks = audio_tracks(source)
+        probe = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                                '-of', 'json', source], capture_output=True, text=True, timeout=30)
+        cache.duration = float(json.loads(probe.stdout)['format']['duration'])
+        import math
+        if not math.isfinite(cache.duration) or cache.duration <= 0:
+            raise ValueError('The video must have a known, finite duration.')
+        metadata = {'name': 'TorBox video', 'tracks': cache.tracks, 'remote': True}
+        atomic_json(folder / 'upload.json', metadata)
+        return dict(metadata, remote_id=folder.name, duration=cache.duration, size=cache.size)
+    except Exception as exc:
+        hub.discard(folder.name)
+        cache.close()
+        shutil.rmtree(folder, ignore_errors=True)
+        message = str(exc) if isinstance(exc, ValueError) and not isinstance(exc, json.JSONDecodeError) else 'Could not read this video. Copy a fresh direct TorBox file link.'
+        raise HTTPException(422, message) from None
+
+@app.post('/api/jobs/remote')
+def remote_job(body: RemoteJob):
+    validate_settings(body.settings)
+    with lock:
+        cache = hub.caches.get(body.remote_id)
+        if not cache or cache.started or not (cache.folder / 'upload.json').exists():
+            raise HTTPException(404, 'Paste the TorBox link again to prepare this video.')
+        if body.settings.track >= len(cache.tracks):
+            raise HTTPException(422, 'Choose an available audio track.')
+        with cache.lock:
+            folder = JOBS / body.remote_id
+            cache.folder.rename(folder)
+            cache.folder = folder
+            (folder / 'upload.json').unlink()
+            cache.started = True
+            job = {'id': folder.name, 'name': 'TorBox video', 'source': str(folder / 'source.media'),
+                   'remote_source': hub.add(cache), 'remote': True, 'duration': cache.duration,
+                   'uploaded': True, 'settings': body.settings.model_dump(),
+                   'created': datetime.now(timezone.utc).isoformat()}
+            atomic_json(folder / 'job.json', job)
+        work.put(folder)
+        return view(folder)
 
 @app.post('/api/jobs/path')
 def path_job(body: PathJob):
@@ -310,8 +380,13 @@ def get_job(job_id: str):
     folder = folder_for(job_id)
     job = view(folder)
     source = json.loads((folder / 'job.json').read_text())['source']
-    job['media_available'] = Path(source).is_file()
+    job['media_available'] = Path(source).is_file() and (not job.get('remote') or job_id in hub.caches)
+    if job.get('remote'):
+        cache = hub.caches.get(job_id)
+        job['download'] = {'bytes': cache.downloaded, 'total': cache.size, 'error': cache.error} if cache else None
     job['metrics'] = snapshot(folder, job['stage'])
+    if job.get('remote') and (folder / 'remote-metrics.json').exists():
+        job['metrics'] = json.loads((folder / 'remote-metrics.json').read_text())
     stream = folder / 'stream.json'
     if stream.exists():
         job['stream'] = json.loads(stream.read_text())
@@ -326,6 +401,8 @@ def open_player(job_id: str):
     folder = folder_for(job_id)
     if view(folder)['stage'] in ('error', 'cancelled'):
         raise HTTPException(409, 'This job stopped. Add the file again to watch with subtitles.')
+    if view(folder).get('remote') and job_id not in hub.caches:
+        raise HTTPException(409, 'The TorBox session ended. Paste the link again to watch.')
     try:
         return player.launch(folder)
     except (ValueError, OSError) as exc:
@@ -348,7 +425,7 @@ def cancel(job_id: str):
         atomic_json(folder / 'progress.json', {'stage': 'cancelled', 'message': 'Cancelled. You can add the file again whenever you’re ready.'})
         (folder / 'audio.wav').unlink(missing_ok=True)
         job = json.loads((folder / 'job.json').read_text())
-        if job['uploaded'] and not job['settings'].get('streaming'):
+        if job['uploaded'] and not job.get('remote') and not job['settings'].get('streaming'):
             Path(job['source']).unlink(missing_ok=True)
     return view(folder)
 

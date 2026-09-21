@@ -16,6 +16,7 @@
 <input type="file" id="file" hidden>
 <button id="browse" class="text-button" type="button">Or browse using your browser</button>
 </div>
+<div class="field"><label for="remote-url">Or use a TorBox video link</label><input id="remote-url" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a direct HTTPS download link"><button id="load-remote" class="secondary" type="button">Load TorBox link</button><p class="help">Copy the direct link for one video from TorBox. Choose an audio track below, then generate or watch live. The private link stays in memory; paste it again after restarting.</p></div>
 <form id="settings-form">
 <div class="field"><label for="track">Audio track to use</label><select id="track" disabled><option value="0">Choose a file to see its audio tracks</option></select><p id="track-help" class="help">Used for subtitle generation and audio in the live player.</p></div>
 <div class="field"><label for="model">Transcription model</label><select id="model"><option value="large">Best accuracy · Whisper Large v3</option><option value="turbo">Balanced · Whisper Large v3 Turbo</option><option value="small">Lightweight · Whisper Small</option><option value="tiny">Quick test · Whisper Tiny</option></select><p id="model-help" class="help">Highest accuracy option here. About 3 GB to download.</p></div>
@@ -29,7 +30,7 @@
 </div></details>
 <button id="generate" class="primary" type="submit" disabled>Generate subtitles <span aria-hidden="true">↗</span></button>
 <button id="watch" class="secondary watch-button" type="button" disabled>▶ Watch with live subtitles</button><p class="help">Opens the local player. Subtitles arrive as you watch; English translation uses your settings above.</p>
-<p class="privacy">Your media stays here. First use downloads the model; after that, you can work offline.</p>
+<p class="privacy">Speech processing stays on your Mac. TorBox mode downloads video into a shared local cache; local files work offline after the model is installed.</p>
 </form>
 </section>
 <section class="output" aria-labelledby="output-title">
@@ -38,6 +39,7 @@
 <div id="job-view" hidden>
 <div class="job-heading"><h3 id="job-name"></h3><span id="job-badge" class="badge"></span></div>
 <div id="player-panel" hidden><div class="player-heading"><strong>Live subtitle player</strong><button id="reopen-player" class="secondary" type="button">Open player ↗</button></div><p id="player-status" role="status"></p><p class="help">Space: pause · F: fullscreen · Arrow keys: seek · B: buffer status · Q: close. Seeking beyond ready subtitles waits for generation to catch up. Closing the player keeps generation running.</p></div>
+<p id="download-status" class="help" role="status" hidden></p>
 <div id="progress-panel" role="status" aria-live="polite"><div class="steps"><span data-stage="audio">Read audio</span><span data-stage="model">Load model</span><span data-stage="transcribing">Create subtitles</span></div><div class="progress-numbers"><strong id="progress-percent">Preparing…</strong><span id="remaining">Estimating time remaining…</span></div><progress max="100" id="progress" aria-label="Processing your file"></progress><p id="progress-message"></p><p id="elapsed" class="help"></p><button id="cancel" class="secondary" type="button">Cancel processing</button></div>
 <details id="activity"><summary>Live processing log</summary><p class="help" id="log-status">Updates every few seconds while processing.</p><label class="follow-log"><input type="checkbox" id="follow-log" checked> Follow latest updates</label><pre id="live-log" tabindex="0" aria-label="Recent processing log">Waiting for the worker to start…</pre><p class="help">Latest 80 log lines. Progress updates after each audio chunk; difficult chunks can take longer. This is a processing log, not a live transcript.</p></details>
 <div id="results" hidden>
@@ -48,7 +50,7 @@
 <div id="pagination"><button id="previous" class="secondary" type="button">← Previous</button><span id="page-label"></span><button id="next" class="secondary" type="button">Next →</button></div>
 </div>
 </div>
-<section class="cleanup-panel" aria-label="Storage cleanup"><button id="cleanup" class="secondary" type="button">Clean up media copies</button><p id="cleanup-size" class="help"></p><p class="help">Removes unused copied videos and temporary audio. Keeps original videos, subtitles, history, and models. Active jobs and open players are skipped. To watch a cleaned-up upload again, select its original file.</p><p id="cleanup-result" role="status" class="help"></p></section>
+<section class="cleanup-panel" aria-label="Storage cleanup"><button id="cleanup" class="secondary" type="button">Clean up media copies</button><p id="cleanup-size" class="help"></p><p class="help">Removes unused copied videos, TorBox caches, and temporary audio. Keeps original videos, subtitles, history, and models. Active jobs and open players are skipped. To watch again after cleanup, select the original file or paste the TorBox link.</p><p id="cleanup-result" role="status" class="help"></p></section>
 <div class="history"><h3>Recent files</h3><p id="no-history" class="help">Your completed files will appear here.</p><div id="history-list"></div></div>
 </section>
 </div>

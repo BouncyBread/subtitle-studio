@@ -32,14 +32,16 @@ def run(folder):
         atomic_json(folder / 'progress.json', {'stage': stage, 'message': message})
     try:
         progress('audio', 'Reading the audio track…')
-        probe = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', config['source']], capture_output=True, text=True, check=True)
-        info = json.loads(probe.stdout)
-        audio_streams = [s for s in info['streams'] if s['codec_type'] == 'audio']
-        track = config['settings']['track']
-        if track >= len(audio_streams):
-            raise ValueError(f'This file has {len(audio_streams)} audio tracks; audio track {track+1} is unavailable.')
         wav = folder / 'audio.wav'
-        subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', config['source'], '-map', f'0:a:{track}', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(wav)], check=True, capture_output=True)
+        if not config.get('remote'):
+            probe = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', config['source']], capture_output=True, text=True, check=True)
+            info = json.loads(probe.stdout)
+            audio_streams = [s for s in info['streams'] if s['codec_type'] == 'audio']
+            track = config['settings']['track']
+            if track >= len(audio_streams):
+                raise ValueError(f'This file has {len(audio_streams)} audio tracks; audio track {track+1} is unavailable.')
+            wav = folder / 'audio.wav'
+            subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', config['source'], '-map', f'0:a:{track}', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(wav)], check=True, capture_output=True)
         settings = config['settings']
         model = settings['model']
         if settings['translate'] and model == 'turbo':
@@ -64,16 +66,21 @@ def run(folder):
             from app.streaming import SubtitlePublisher
             publisher = SubtitlePublisher(folder, settings['width'])
             extra['segment_callback'] = publisher.publish
-        result = transcribe(
-            str(wav), path_or_hf_repo=model_path,
-            language=settings['language'] or None,
-            task='translate' if settings['translate'] else 'transcribe',
-            word_timestamps=not settings['translate'],
-            condition_on_previous_text=False,
-            initial_prompt=settings['prompt'] or None,
-            verbose=False,
-            **extra,
-        )
+        if config.get('remote'):
+            from app.remote_worker import transcribe_remote
+            result = transcribe_remote(folder, config, model_path, mlx_whisper.transcribe)
+            publisher = None
+        else:
+            result = transcribe(
+                str(wav), path_or_hf_repo=model_path,
+                language=settings['language'] or None,
+                task='translate' if settings['translate'] else 'transcribe',
+                word_timestamps=not settings['translate'],
+                condition_on_previous_text=False,
+                initial_prompt=settings['prompt'] or None,
+                verbose=False,
+                **extra,
+            )
         from app.subtitles import make_cues
         cues = make_cues(result['segments'], settings['width'])
         atomic_json(folder / 'result.json', {'segments': cues, 'language': result.get('language', 'unknown'), 'model': model, 'translated': settings['translate']})
@@ -93,7 +100,7 @@ def run(folder):
         sys.exit(1)
     finally:
         (folder / 'audio.wav').unlink(missing_ok=True)
-        if config.get('uploaded') and not config['settings'].get('streaming'):
+        if config.get('uploaded') and not config.get('remote') and not config['settings'].get('streaming'):
             Path(config['source']).unlink(missing_ok=True)
 
 

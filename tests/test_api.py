@@ -171,3 +171,31 @@ def test_failed_probe_removes_prepared_copy(client,monkeypatch):
     monkeypatch.setattr(server,'audio_tracks',fail)
     assert client.post('/api/media/upload',files={'file':('bad.mkv',b'bad')}).status_code==422
     assert list(server.UPLOADS.iterdir())==[]
+
+
+def test_remote_job_lifecycle_and_privacy(client, monkeypatch):
+    from app.remote import RangeCache, hub
+    folder = server.UPLOADS / str(uuid.uuid4()); folder.mkdir()
+    (folder/'source.media').write_bytes(b'cached block')
+    atomic_json(folder/'upload.json',{'name':'TorBox video'})
+    cache = RangeCache('https://cdn.torbox.app/file?token=SECRET',folder)
+    cache.tracks = [{'index':0}]; cache.duration = 120; cache.size = 1000
+    hub.caches[folder.name] = cache
+    monkeypatch.setattr(hub,'add',lambda c:'http://127.0.0.1:1234/'+c.folder.name)
+    body = {'remote_id':folder.name,'settings':{'track':1}}
+    assert client.post('/api/jobs/remote',json=body).status_code == 422
+    body['settings']['track'] = 0
+    response = client.post('/api/jobs/remote',json=body)
+    assert response.status_code == 200
+    job = response.json()
+    assert job['remote'] and 'remote_source' not in job
+    assert 'SECRET' not in response.text
+    metadata = (server.JOBS/job['id']/'job.json').read_text()
+    assert 'SECRET' not in metadata and 'torbox.app' not in metadata
+    assert client.get('/api/jobs/'+job['id']).json()['media_available']
+    assert client.post('/api/jobs/remote',json=body).status_code == 404
+    assert client.post('/api/cleanup').json()['skipped_jobs'] == 1
+    client.post('/api/jobs/'+job['id']+'/cancel')
+    client.post('/api/cleanup')
+    assert job['id'] not in hub.caches and cache.url == ''
+    assert not (server.JOBS/job['id']/'source.media').exists()
