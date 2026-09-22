@@ -82,3 +82,31 @@ def test_changed_video_is_rejected(tmp_path):
     with pytest.raises(ValueError,match='changed'):
         cache.block(1)
     cache.close()
+
+
+@pytest.mark.parametrize('host', ['torbox.app', 'cdn.torbox.app', 'tb-cdn.earth', 'nexus.hare.tb-cdn.earth'])
+def test_torbox_cdn_hosts_accepted(monkeypatch, host):
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *a, **kw: [(0,0,0,'',('93.184.216.34',443))])
+    validate_url(f'https://{host}/dld/test-file?token=test-only')
+
+
+@pytest.mark.parametrize('host', ['tb-cdn.earth.evil.test', 'evil-tb-cdn.earth'])
+def test_cdn_lookalikes_rejected(host):
+    with pytest.raises(ValueError):
+        validate_url(f'https://{host}/dld/test-file')
+
+
+def test_torbox_redirect_to_cdn(tmp_path, monkeypatch):
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *a, **kw: [(0,0,0,'',('93.184.216.34',443))])
+    calls = []
+    def serve(request):
+        calls.append(request.url.host)
+        if request.url.host == 'api.torbox.app':
+            return httpx.Response(302, headers={'location':'https://nexus.hare.tb-cdn.earth/dld/test?token=test-only'})
+        return httpx.Response(206, headers={'content-range':'bytes 0-3/4'}, content=b'test')
+    cache = RangeCache('https://api.torbox.app/test', tmp_path, client=httpx.Client(transport=httpx.MockTransport(serve)))
+    try:
+        assert cache.block(0) == b'test'
+        assert calls == ['api.torbox.app', 'nexus.hare.tb-cdn.earth']
+    finally:
+        cache.close()

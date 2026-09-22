@@ -174,7 +174,7 @@ Audio-track inspection happens when selecting a file. **Choose file…** probes 
 3. Choose the audio track, model, English translation setting, and subtitle buffer.
 4. Click **Watch with live subtitles**. The native player starts once enough subtitles are ready, and waits again if generation falls behind. **Generate subtitles** also works with links.
 
-The app supports HTTPS links on `torbox.app` and its subdomains, including redirects within those domains. The file must support HTTP byte ranges and have a readable duration. No TorBox API key is needed when using a direct link. TorBox account access and a ready file are still required on TorBox's side.
+The app supports HTTPS links on `torbox.app`, `tb-cdn.earth`, and their subdomains, including redirects between those domains. TorBox CDN links (for example, `https://nexus.hare.tb-cdn.earth/dld/…`) are direct video links and can be pasted as-is. The file must support HTTP byte ranges and have a readable duration. No TorBox API key is needed when using a direct link. TorBox account access and a ready file are still required on TorBox's side.
 
 The player and audio decoder share one local byte-range cache with serialized upstream requests. Only requested ranges are fetched; playback and transcription can start before the full file downloads. Audio is processed in 30-second windows with two seconds of surrounding context. Very fast downloads or small files may finish downloading before the first subtitles appear. Speech crossing a window boundary can have less accurate caption timing; review the exported subtitles.
 

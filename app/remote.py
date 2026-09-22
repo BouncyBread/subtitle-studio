@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 BLOCK = 1024 * 1024
+TORBOX_DOMAINS = ('torbox.app', 'tb-cdn.earth')
 
 
 def validate_url(url):
@@ -18,13 +19,13 @@ def validate_url(url):
         host = (parts.hostname or '').lower()
         if (parts.scheme != 'https' or parts.username or parts.password or
                 parts.port not in (None, 443) or parts.fragment or
-                not (host == 'torbox.app' or host.endswith('.torbox.app'))):
+                not any(host == domain or host.endswith('.' + domain) for domain in TORBOX_DOMAINS)):
             raise ValueError()
         addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
         if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
             raise ValueError()
     except (ValueError, OSError):
-        raise ValueError('Use a direct HTTPS video download link from TorBox (torbox.app).') from None
+        raise ValueError('Use a direct HTTPS video download link from TorBox (torbox.app or tb-cdn.earth).') from None
 
 
 class RangeCache:
